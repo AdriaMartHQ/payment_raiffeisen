@@ -8,7 +8,7 @@
     "author": "AdriaMart",
     "website": "https://github.com/AdriaMartHQ/payment_raiffeisen",
     "license": "OPL-1",
-    "price": 0,
+    "price": 79,
     "currency": "EUR",
     "images": ["static/description/banner.png"],
     "depends": [
