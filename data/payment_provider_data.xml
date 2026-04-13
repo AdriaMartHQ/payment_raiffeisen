@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="payment_provider_raiffeisen" model="payment.provider">
+        <field name="name">Raiffeisen RaiAccept</field>
+        <field name="code">raiffeisen</field>
+        <field name="redirect_form_view_id" ref="redirect_form"/>
+        <field name="payment_method_ids"
+               eval="[(4, ref('payment.payment_method_card'))]"/>
+        <field name="module_id" ref="base.module_payment_raiffeisen"/>
+    </record>
+
+</odoo>

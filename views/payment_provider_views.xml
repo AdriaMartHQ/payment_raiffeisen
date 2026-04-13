@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <record id="payment_provider_form_raiffeisen" model="ir.ui.view">
+        <field name="name">payment.provider.form.raiffeisen</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <group name="provider_credentials" position="inside">
+                <group invisible="code != 'raiffeisen'"
+                       name="raiffeisen_credentials"
+                       string="Raiffeisen RaiAccept">
+                    <!-- Production credentials: shown only in enabled state -->
+                    <group string="Production Credentials"
+                           invisible="state != 'enabled'">
+                        <field name="raiffeisen_api_username"
+                               string="Username"
+                               required="state == 'enabled'"
+                               copy="False"/>
+                        <field name="raiffeisen_api_password"
+                               string="Password"
+                               password="True"
+                               required="state == 'enabled'"
+                               copy="False"/>
+                    </group>
+                    <!-- Sandbox credentials: shown only in test state -->
+                    <group string="Sandbox Credentials"
+                           invisible="state != 'test'">
+                        <field name="raiffeisen_sandbox_username"
+                               string="Sandbox Username"
+                               required="state == 'test'"
+                               copy="False"/>
+                        <field name="raiffeisen_sandbox_password"
+                               string="Sandbox Password"
+                               password="True"
+                               required="state == 'test'"
+                               copy="False"/>
+                    </group>
+                    <!-- Currency settings: always visible -->
+                    <group string="Currency Settings"
+                           invisible="state == 'disabled'">
+                        <field name="raiffeisen_gateway_currency"/>
+                        <field name="raiffeisen_currency_rate"/>
+                    </group>
+                </group>
+            </group>
+        </field>
+    </record>
+
+</odoo>

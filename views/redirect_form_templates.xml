@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Redirect form: auto-submits a GET to the RaiAccept checkout URL -->
+    <template id="redirect_form">
+        <form t-att-action="api_url" method="get">
+            <t t-foreach="url_params or {}" t-as="param">
+                <input type="hidden"
+                       t-att-name="param"
+                       t-att-value="url_params[param]"/>
+            </t>
+        </form>
+    </template>
+
+</odoo>
