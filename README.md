@@ -15,6 +15,26 @@ Accept online card payments (Visa, Mastercard, Maestro, Diners) via Raiffeisen B
 - Secure webhook processing with authoritative gateway verification
 - Comprehensive country code mapping (50+ countries)
 
+## Supported Countries (Merchant)
+
+This module works for merchants with a Raiffeisen Bank business account in the following RaiAccept-connected markets:
+
+| Country | Bank | Currency |
+|---------|------|----------|
+| Serbia | Raiffeisen banka a.d. Beograd | RSD |
+| Austria | Raiffeisen Bank International | EUR |
+| Croatia | Raiffeisenbank Austria d.d. Zagreb | EUR |
+| Bosnia & Herzegovina | Raiffeisen Bank d.d. BiH | EUR |
+| Kosovo | Raiffeisen Bank Kosovo | EUR |
+| Albania | Raiffeisen Bank Albania | EUR |
+| Romania | Raiffeisen Bank Romania | EUR |
+| Hungary | Raiffeisen Bank Zrt. | EUR |
+| Czech Republic | Raiffeisenbank a.s. | EUR |
+| Slovakia | Tatra banka (RBI group) | EUR |
+| Ukraine | Raiffeisen Bank Ukraine | EUR |
+
+**Customer payments**: Customers from any country worldwide can pay using Visa, Mastercard, Maestro, Diners and other card networks. Billing address mapping covers 50+ countries.
+
 ## Requirements
 
 - **Odoo 19.0** (Community or Enterprise)
