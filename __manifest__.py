@@ -5,8 +5,8 @@
     "sequence": 370,
     "summary": "Accept online card payments via Raiffeisen Bank RaiAccept gateway (Serbia & SEE).",
     "description": " ",  # Non-empty to avoid loading README as description.
-    "author": "Daihuo Tech",
-    "website": "https://github.com/daihuo/payment_raiffeisen",
+    "author": "AdriaMart",
+    "website": "https://github.com/AdriaMartHQ/payment_raiffeisen",
     "license": "OPL-1",
     "price": 0,
     "currency": "EUR",

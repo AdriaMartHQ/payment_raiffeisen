@@ -51,5 +51,5 @@ OPL-1 (Odoo Proprietary License v1.0)
 
 ## Support
 
-- GitHub Issues: https://github.com/daihuo/payment_raiffeisen/issues
-- Email: support@daihuo.tech
+- GitHub Issues: https://github.com/AdriaMartHQ/payment_raiffeisen/issues
+- Email: balkan@adriamart.com
