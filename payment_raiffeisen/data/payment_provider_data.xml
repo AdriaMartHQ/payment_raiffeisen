@@ -4,10 +4,31 @@
     <record id="payment_provider_raiffeisen" model="payment.provider">
         <field name="name">Raiffeisen RaiAccept</field>
         <field name="code">raiffeisen</field>
+        <field name="image_128"
+               type="base64"
+               file="payment_raiffeisen/static/description/icon.png"/>
         <field name="redirect_form_view_id" ref="redirect_form"/>
         <field name="payment_method_ids"
                eval="[(4, ref('payment.payment_method_card'))]"/>
         <field name="module_id" ref="base.module_payment_raiffeisen"/>
+        <field name="available_country_ids"
+               eval="[(6, 0, [
+                   ref('base.rs'),
+                   ref('base.ba'),
+                   ref('base.me'),
+                   ref('base.mk'),
+                   ref('base.al'),
+                   ref('base.bg'),
+                   ref('base.hr'),
+                   ref('base.si'),
+                   ref('base.hu'),
+                   ref('base.ro'),
+                   ref('base.at'),
+                   ref('base.de'),
+                   ref('base.it'),
+                   ref('base.fr'),
+                   ref('base.gb'),
+               ])]"/>
     </record>
 
 </odoo>
