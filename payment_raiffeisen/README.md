@@ -65,6 +65,61 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 - Transaction ID selection prefers successful PURCHASE transactions
 - Refund callbacks routed by `transactionId` for correct child tx resolution
 
+## Changelog
+
+### 19.0.1.1.0 — 2026-04-14
+
+First production-tested release. This version has been validated end-to-end
+on a live Odoo 19 e-commerce site with real sandbox transactions.
+
+**Bug fixes**
+
+- Fix `AttributeError: 'res.partner' object has no attribute 'mobile'`.
+  Odoo 19 merged `partner.mobile` into `partner.phone`; the module now
+  uses `phone` for both the `phone` and `mobilePhone` fields in the
+  RaiAccept consumer payload.
+- Fix HTTP 400 Bad Request on `/orders` caused by oversized `state`
+  field. RaiAccept validates `billingAddress.state` / `shippingAddress.state`
+  to 0–3 characters. The module now reads `res.country.state.code`
+  (e.g. `RS-00`), strips the country prefix, and omits the field entirely
+  if a short code cannot be produced.
+- Fix amount being inflated 100× for RSD orders. RaiAccept treats RSD
+  as a zero-decimal currency — sending 82500 was being displayed as
+  "82,500.00 RSD" instead of "825.00 RSD". A new
+  `_raiffeisen_minor_unit_factor(currency)` helper returns 1 for RSD
+  and 100 for EUR, applied in all three places where the module
+  computes minor units (order payload, status verification, refund).
+- Fix customers landing on a blank RaiAccept "unexpected error" page.
+  The redirect form uses `method="get"`, which caused browsers to drop
+  the query string on the RaiAccept session URL (`?token=...&session=...`).
+  The module now parses the redirect URL with `urlparse`, passes the
+  path as `api_url` and the query parameters as hidden inputs via
+  `url_params`, so the GET form submission reconstructs the full URL.
+- Fix double-slash in callback URLs (`https://site.rs//payment/...`)
+  by stripping the trailing slash from `get_base_url()`.
+
+**Improvements**
+
+- On HTTP 4xx/5xx responses, the module now logs the full outgoing
+  request payload and the RaiAccept response body, and surfaces a
+  truncated copy of the response body in the user-facing `ValidationError`
+  so merchants can diagnose validation failures without digging into
+  `journalctl`.
+- Provider icon (`image_128`) and Apps Store assets updated to the
+  official Raiffeisen "Giebelkreuz" brand mark and a clean Raiffeisen
+  Visa card artwork.
+- `available_country_ids` on the provider record now defaults to a
+  curated list of 15 SEE/CEE + core EU markets, so RaiAccept only
+  appears at checkout for customers with shipping addresses in those
+  countries.
+
+### 19.0.1.0.0 — 2026-04-13
+
+Initial release. Full RaiAccept API integration, RSD/EUR settlement,
+partial & full refunds, Cyrillic transliteration, webhook with
+authoritative amount/currency verification, sandbox/production
+credential split.
+
 ## License
 
 OPL-1 (Odoo Proprietary License v1.0)
