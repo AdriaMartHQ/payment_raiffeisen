@@ -202,14 +202,31 @@ class PaymentProvider(models.Model):
                 headers=headers,
                 timeout=30,
             )
+            if resp.status_code >= 400:
+                # Log full response body to aid debugging RaiAccept
+                # validation errors. RaiAccept returns JSON with
+                # field-level error details on 400 responses.
+                _logger.error(
+                    "Raiffeisen API %s %s -> %s\nRequest payload: %s\n"
+                    "Response body: %s",
+                    method, endpoint, resp.status_code,
+                    payload, resp.text,
+                )
             resp.raise_for_status()
             return resp.json() if resp.content else {}
         except requests.RequestException as exc:
+            body = ""
+            if exc.response is not None:
+                body = exc.response.text or ""
             _logger.error(
-                "Raiffeisen API %s %s failed: %s", method, endpoint, exc
+                "Raiffeisen API %s %s failed: %s. Body: %s",
+                method, endpoint, exc, body,
             )
+            # Show a truncated body in the user-facing error so the
+            # admin sees the validation reason without digging into logs.
+            short = body[:300] if body else str(exc)
             raise ValidationError(
-                _("Raiffeisen API request failed: %s") % str(exc)
+                _("Raiffeisen API request failed: %s") % short
             ) from exc
 
     # ── Order / Checkout ─────────────────────────────────────────────
@@ -266,7 +283,9 @@ class PaymentProvider(models.Model):
                   partner.country_id.name or "N/A", country_a2)
             )
 
-        base_url = self.get_base_url()
+        # Strip trailing slash to avoid double-slash in callback URLs like
+        # "https://adriamart.rs//payment/raiffeisen/return".
+        base_url = self.get_base_url().rstrip("/")
 
         name_parts = (partner.name or "Customer").split()
         first_name = name_parts[0]
@@ -285,10 +304,17 @@ class PaymentProvider(models.Model):
             billing_address["addressStreet2"] = _transliterate(
                 partner.street2
             )
-        if partner.state_id:
-            billing_address["state"] = _transliterate(
-                partner.state_id.name
-            )
+        # RaiAccept requires state to be an ISO 3166-2 subdivision code
+        # with max length 3. Odoo's res.country.state.code is typically
+        # like "RS-00" or "00" — strip the country prefix and truncate.
+        # If we can't produce a ≤3 char code, omit the state field
+        # (RaiAccept accepts empty state).
+        if partner.state_id and partner.state_id.code:
+            raw_code = partner.state_id.code
+            if "-" in raw_code:
+                raw_code = raw_code.split("-", 1)[1]
+            if raw_code and len(raw_code) <= 3:
+                billing_address["state"] = raw_code
 
         consumer = {
             "firstName": billing_address["firstName"],
