@@ -295,10 +295,11 @@ class PaymentProvider(models.Model):
             "lastName": billing_address["lastName"],
             "email": partner.email or "noreply@example.com",
         }
+        # Odoo 19 merged partner.mobile into partner.phone; use phone for both.
         if partner.phone:
-            consumer["phone"] = re.sub(r"\D", "", partner.phone)
-        if partner.mobile:
-            consumer["mobilePhone"] = re.sub(r"\D", "", partner.mobile)
+            phone_digits = re.sub(r"\D", "", partner.phone)
+            consumer["phone"] = phone_digits
+            consumer["mobilePhone"] = phone_digits
 
         invoice_items = [{
             "description": _transliterate(tx.reference or "Order"),
