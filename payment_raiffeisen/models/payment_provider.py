@@ -259,19 +259,34 @@ class PaymentProvider(models.Model):
             )
         return redirect_url
 
+    @staticmethod
+    def _raiffeisen_minor_unit_factor(currency):
+        """Return the multiplier that converts a major-unit amount
+        into RaiAccept's minor unit for the given gateway currency.
+
+        RaiAccept expects whole integers:
+        - RSD: zero-decimal — RaiAccept stores and displays whole
+          dinars. Sending 82500 shows as "82,500.00 RSD", not
+          "825.00 RSD". So factor = 1.
+        - EUR: two-decimal cents — factor = 100.
+        """
+        return 1 if (currency or "").upper() == "RSD" else 100
+
     def _raiffeisen_build_order_payload(self, tx):
         """Build the CreateOrderEntryRequest payload from a transaction."""
         self.ensure_one()
         partner = tx.partner_id
 
-        # Amount conversion to smallest currency unit (cents)
+        gateway_currency = self.raiffeisen_gateway_currency or "RSD"
+
+        # Amount in gateway minor units.
+        # See _raiffeisen_minor_unit_factor for currency-specific rules.
         amount = tx.amount
         rate = self.raiffeisen_currency_rate or 1.0
         if rate > 0:
             amount = amount * rate
-        amount_cents = int(round(amount * 100))
-
-        gateway_currency = self.raiffeisen_gateway_currency or "RSD"
+        factor = self._raiffeisen_minor_unit_factor(gateway_currency)
+        amount_cents = int(round(amount * factor))
 
         country_a2 = partner.country_id.code or ""
         country_a3 = _COUNTRY_ISO3.get(country_a2)

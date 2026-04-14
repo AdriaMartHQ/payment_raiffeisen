@@ -176,8 +176,14 @@ class PaymentTransaction(models.Model):
                     gw_refund_amt = refund_tx.get("amount")
                     if gw_refund_amt is not None:
                         rate = self.raiffeisen_currency_rate or 1.0
+                        gw_currency = (
+                            self.raiffeisen_gateway_currency or "RSD"
+                        )
+                        factor = self.provider_id._raiffeisen_minor_unit_factor(
+                            gw_currency
+                        )
                         expected = int(
-                            round(abs(self.amount) * rate * 100)
+                            round(abs(self.amount) * rate * factor)
                         )
                         if abs(gw_refund_amt - expected) > 1:
                             self._set_error(
@@ -223,8 +229,11 @@ class PaymentTransaction(models.Model):
                 gw_currency = invoice.get("currency")
                 if gw_amount_cents is not None and gw_currency:
                     rate = self.raiffeisen_currency_rate or 1.0
+                    factor = self.provider_id._raiffeisen_minor_unit_factor(
+                        gw_currency
+                    )
                     expected_cents = int(
-                        round(self.amount * rate * 100)
+                        round(self.amount * rate * factor)
                     )
                     expected_currency = (
                         self.raiffeisen_gateway_currency or "RSD"
@@ -319,7 +328,8 @@ class PaymentTransaction(models.Model):
         rate = source_tx.raiffeisen_currency_rate or 1.0
         currency = source_tx.raiffeisen_gateway_currency or "RSD"
         # self.amount is negative for refunds; use abs
-        amount_cents = int(round(abs(self.amount) * rate * 100))
+        factor = self.provider_id._raiffeisen_minor_unit_factor(currency)
+        amount_cents = int(round(abs(self.amount) * rate * factor))
 
         # Send refund to RaiAccept
         provider = self.provider_id
