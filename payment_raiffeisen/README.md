@@ -67,6 +67,24 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 
 ## Changelog
 
+### 19.0.1.3.0 — 2026-04-14
+
+Brand display polish.
+
+**Fixes**
+
+- Link the provider to both the primary `Card` method **and** each
+  accepted brand (Visa, Mastercard, Maestro, Diners, DinaCard).
+  Linking only the primary hid the brand icons at checkout; linking
+  only the brands caused Odoo's `_get_compatible_payment_methods`
+  to drop the Card method with "no supported provider available".
+  Both are required.
+- Pre-pad the DinaCard PNG onto a transparent 3:2 canvas (318×214)
+  so Odoo's Image-field resize produces a 64×43 icon, matching the
+  dimensions of Visa/Mastercard/Maestro/Diners. Previously the
+  DinaCard icon was rendered ~25% shorter than its neighbours and
+  the text was unreadable.
+
 ### 19.0.1.2.0 — 2026-04-14
 
 Payment brand coverage update.
