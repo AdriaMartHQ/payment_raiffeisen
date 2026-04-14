@@ -67,6 +67,23 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 
 ## Changelog
 
+### 19.0.1.2.0 — 2026-04-14
+
+Payment brand coverage update.
+
+**Improvements**
+
+- Declare explicit brand list on the Raiffeisen provider: **Visa,
+  Mastercard, Maestro, Diners, DinaCard**. Previously the provider
+  only linked to the generic `Card` method, so the Odoo brand pills
+  on checkout/config views were empty.
+- Ship **DinaCard** (Serbian national card scheme, operated by NBS)
+  as a brand record. Odoo core does not include DinaCard by default;
+  this module now creates it as a child of the `Card` method with a
+  bundled logo asset under `static/src/img/dinacard.png`. Merchants
+  on Raiffeisen RaiAccept in Serbia can now show a DinaCard pill
+  alongside Visa/Mastercard at checkout.
+
 ### 19.0.1.1.0 — 2026-04-14
 
 First production-tested release. This version has been validated end-to-end

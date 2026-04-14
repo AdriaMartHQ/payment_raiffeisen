@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
 
+    <!--
+        DinaCard — Serbian national card scheme. Not shipped by Odoo core,
+        so we create it here as a brand (child of the generic Card method).
+    -->
+    <record id="payment_method_dinacard" model="payment.method">
+        <field name="name">DinaCard</field>
+        <field name="code">dinacard</field>
+        <field name="primary_payment_method_id" ref="payment.payment_method_card"/>
+        <field name="image"
+               type="base64"
+               file="payment_raiffeisen/static/src/img/dinacard.png"/>
+    </record>
+
     <record id="payment_provider_raiffeisen" model="payment.provider">
         <field name="name">Raiffeisen RaiAccept</field>
         <field name="code">raiffeisen</field>
@@ -9,7 +22,13 @@
                file="payment_raiffeisen/static/description/icon.png"/>
         <field name="redirect_form_view_id" ref="redirect_form"/>
         <field name="payment_method_ids"
-               eval="[(4, ref('payment.payment_method_card'))]"/>
+               eval="[(6, 0, [
+                   ref('payment.payment_method_visa'),
+                   ref('payment.payment_method_mastercard'),
+                   ref('payment.payment_method_maestro'),
+                   ref('payment.payment_method_diners'),
+                   ref('payment_raiffeisen.payment_method_dinacard'),
+               ])]"/>
         <field name="module_id" ref="base.module_payment_raiffeisen"/>
         <field name="available_country_ids"
                eval="[(6, 0, [
