@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse, parse_qsl, urlunparse
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
@@ -68,8 +69,18 @@ class PaymentTransaction(models.Model):
             self._set_error(str(error))
             return {}
 
-        # api_url is consumed by the redirect_form QWeb template
-        return {"api_url": redirect_url, "url_params": {}}
+        # The redirect_form template uses <form method="get">, which
+        # causes browsers to strip any query string on the action URL
+        # and rebuild it from the form's hidden inputs. Split the
+        # RaiAccept redirect URL so the query params are passed as
+        # url_params (they become <input type="hidden"> fields) and
+        # the action URL is just the path.
+        parsed = urlparse(redirect_url)
+        api_url = urlunparse(
+            (parsed.scheme, parsed.netloc, parsed.path, "", "", "")
+        )
+        url_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        return {"api_url": api_url, "url_params": url_params}
 
     # ── Reference extraction ─────────────────────────────────────────
 
