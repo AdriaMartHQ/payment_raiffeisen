@@ -33,7 +33,14 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 | Slovakia | Tatra banka (RBI group) | EUR |
 | Ukraine | Raiffeisen Bank Ukraine | EUR |
 
-**Customer payments**: Customers from any country worldwide can pay using Visa, Mastercard, Maestro, Diners and other card networks. Billing address mapping covers 50+ countries.
+**Customer payments**: Customers from any country worldwide can pay using Visa, Mastercard, Maestro, Diners, DinaCard and other card networks. Billing address mapping covers 50+ countries.
+
+## Documentation
+
+Official RaiAccept API reference, test card numbers, and integration guides:
+
+- **https://docs.raiaccept.com/index.html** — RaiAccept docs (merchant
+  onboarding, API specs, webhook details)
 
 ## Requirements
 
@@ -66,6 +73,19 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 - Refund callbacks routed by `transactionId` for correct child tx resolution
 
 ## Changelog
+
+### 19.0.1.4.0 — 2026-04-14
+
+Documentation and branding.
+
+- Replace the plugin icon with the official **Raiffeisen Giebelkreuz**
+  brand mark (yellow square with the crossed horse-head gable cross),
+  cropped and centered on a clean 128×128 square.
+- Add **DinaCard** to the supported brands list throughout the
+  Odoo Apps Store description (`static/description/index.html`).
+- Add a **Documentation** section linking to the official RaiAccept
+  API reference at https://docs.raiaccept.com/index.html, both in
+  README and in the Apps Store description.
 
 ### 19.0.1.3.0 — 2026-04-14
 
