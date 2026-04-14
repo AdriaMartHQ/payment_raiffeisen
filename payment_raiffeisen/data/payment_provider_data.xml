@@ -21,14 +21,15 @@
                type="base64"
                file="payment_raiffeisen/static/description/icon.png"/>
         <field name="redirect_form_view_id" ref="redirect_form"/>
+        <!--
+            Link to the PRIMARY Card method. Odoo's
+            _get_compatible_payment_methods filters by primary methods
+            only; brands (Visa, Mastercard, Maestro, Diners, DinaCard)
+            are picked up automatically via their
+            primary_payment_method_id=card relationship.
+        -->
         <field name="payment_method_ids"
-               eval="[(6, 0, [
-                   ref('payment.payment_method_visa'),
-                   ref('payment.payment_method_mastercard'),
-                   ref('payment.payment_method_maestro'),
-                   ref('payment.payment_method_diners'),
-                   ref('payment_raiffeisen.payment_method_dinacard'),
-               ])]"/>
+               eval="[(4, ref('payment.payment_method_card'))]"/>
         <field name="module_id" ref="base.module_payment_raiffeisen"/>
         <field name="available_country_ids"
                eval="[(6, 0, [
