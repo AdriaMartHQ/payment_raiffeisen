@@ -36,8 +36,6 @@
                    ref('payment.payment_method_card'),
                    ref('payment.payment_method_visa'),
                    ref('payment.payment_method_mastercard'),
-                   ref('payment.payment_method_maestro'),
-                   ref('payment.payment_method_diners'),
                    ref('payment_raiffeisen.payment_method_dinacard'),
                ])]"/>
         <field name="module_id" ref="base.module_payment_raiffeisen"/>

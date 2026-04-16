@@ -2,7 +2,7 @@
 
 Odoo 19 payment provider module for **Raiffeisen Bank RaiAccept** gateway.
 
-Accept online card payments (Visa, Mastercard, Maestro, Diners) via Raiffeisen Bank's hosted payment page. Designed for merchants in Serbia and Southeast Europe.
+Accept online payments via Raiffeisen Bank's hosted payment page. Supports Visa, Mastercard, and DinaCard, with Apple Pay and Google Pay coming soon. Designed for merchants in Serbia and Southeast Europe.
 
 ## Features
 
@@ -33,7 +33,11 @@ This module works for merchants with a Raiffeisen Bank business account in the f
 | Slovakia | Tatra banka (RBI group) | EUR |
 | Ukraine | Raiffeisen Bank Ukraine | EUR |
 
-**Customer payments**: Customers from any country worldwide can pay using Visa, Mastercard, Maestro, Diners, DinaCard and other card networks. Billing address mapping covers 50+ countries.
+**Supported payment methods**:
+- **Cards**: Visa, Mastercard, DinaCard
+- **Digital wallets** (coming soon): Apple Pay, Google Pay
+
+Customers from any country worldwide can pay. Billing address mapping covers 50+ countries.
 
 ## Documentation
 
@@ -94,14 +98,14 @@ Brand display polish.
 **Fixes**
 
 - Link the provider to both the primary `Card` method **and** each
-  accepted brand (Visa, Mastercard, Maestro, Diners, DinaCard).
+  accepted brand (Visa, Mastercard, DinaCard).
   Linking only the primary hid the brand icons at checkout; linking
   only the brands caused Odoo's `_get_compatible_payment_methods`
   to drop the Card method with "no supported provider available".
   Both are required.
 - Pre-pad the DinaCard PNG onto a transparent 3:2 canvas (318×214)
   so Odoo's Image-field resize produces a 64×43 icon, matching the
-  dimensions of Visa/Mastercard/Maestro/Diners. Previously the
+  dimensions of Visa/Mastercard. Previously the
   DinaCard icon was rendered ~25% shorter than its neighbours and
   the text was unreadable.
 
@@ -112,7 +116,7 @@ Payment brand coverage update.
 **Improvements**
 
 - Declare explicit brand list on the Raiffeisen provider: **Visa,
-  Mastercard, Maestro, Diners, DinaCard**. Previously the provider
+  Mastercard, DinaCard**. Previously the provider
   only linked to the generic `Card` method, so the Odoo brand pills
   on checkout/config views were empty.
 - Ship **DinaCard** (Serbian national card scheme, operated by NBS)
