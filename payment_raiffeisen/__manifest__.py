@@ -5,10 +5,10 @@
     "sequence": 370,
     "summary": "Accept online card payments via Raiffeisen Bank RaiAccept gateway (Serbia & SEE).",
     "description": " ",  # Non-empty to avoid loading README as description.
-    "author": "AdriaMart",
-    "website": "https://github.com/AdriaMartHQ/payment_raiffeisen",
-    "license": "OPL-1",
-    "price": 79,
+    "author": "Adria Mart d.o.o.",
+    "website": "https://adriamart.rs",
+    "license": "LGPL-3",
+    "price": 0,
     "currency": "EUR",
     "images": ["static/description/banner.png"],
     "depends": [

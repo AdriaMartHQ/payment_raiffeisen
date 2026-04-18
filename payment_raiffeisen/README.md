@@ -181,7 +181,14 @@ credential split.
 
 ## License
 
-OPL-1 (Odoo Proprietary License v1.0)
+LGPL-3 (GNU Lesser General Public License v3.0) — free and open source.
+
+## Maintainer
+
+Maintained by **Adria Mart d.o.o.**, Belgrade, Serbia
+- Matični broj: 68230454
+- Web: https://adriamart.rs
+- Email: balkan@adriamart.com
 
 ## Support
 
