@@ -49,7 +49,7 @@ LGPL-3 — see [`payment_raiffeisen/LICENSE`](payment_raiffeisen/LICENSE).
 
 ## Maintainer
 
-Built and maintained by **Adria Mart d.o.o.** (Belgrade, Serbia) — [adriamart.rs](https://adriamart.rs) — during our pre-launch technical preparation. Pull requests and issues welcome.
+Built and maintained by **Adria Mart** (sole proprietorship, Belgrade, Serbia) — [adriamart.rs](https://adriamart.rs) — during our pre-launch technical preparation. Pull requests and issues welcome.
 
 - Blog: [Open-Source Odoo 19 Payment Provider: Raiffeisen RaiAccept](https://adriamart.rs/blog/resources-3/8)
 - Email: balkan@adriamart.rs
