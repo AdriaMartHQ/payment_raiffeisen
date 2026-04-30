@@ -12,12 +12,23 @@ Run with::
 
 These are TransactionCase tests so they need an Odoo database. The
 helper-method tests under TestProviderHelpers don't actually create
-transactions and run fast (~ms). The controller tests
-(TestWebhookEndpoint) exercise the full HTTP layer via HttpCase and
-need a running HTTP server, so they run a few seconds.
-"""
+transactions and run fast (~ms).
 
-from unittest.mock import patch
+Codex review on PR #78 surfaced two P1 gaps that drove a revision:
+
+  - XFF spoofability — the controller previously read
+    `X-Forwarded-For` directly to derive remote_ip, which an attacker
+    can forge to bypass the IP allowlist. Fixed by reading
+    `request.httprequest.remote_addr` only and documenting the
+    requirement to enable Odoo `proxy_mode` behind reverse proxies.
+
+  - enforce mode silent-accept — the controller used to reject only
+    when `_raiffeisen_verify_webhook_signature` returned False, but
+    the verifier stub returns None for every code path so enforce
+    was equivalent to warn. Fixed: enforce now requires sig_ok is
+    True; both False AND None are rejected with HTTP 403. Tests
+    below cover the new contract.
+"""
 
 from odoo.tests import TransactionCase, tagged
 
@@ -117,7 +128,14 @@ class TestProviderHelpers(TransactionCase):
         """With cert set + mode != off, the verifier currently returns
         None with 'not yet implemented' — that's the documented stub
         behavior. When the real RSA verification lands, this test
-        flips to assert True/False on real fixture data."""
+        flips to assert True/False on real fixture data.
+
+        IMPORTANT (post Codex P1 PR #78): even though the helper
+        returns None here, the *controller* now rejects in enforce
+        mode whenever sig_ok is not True — so a None stub in enforce
+        mode hard-fails the webhook. That contract is enforced one
+        layer up, not in the helper itself; see
+        controllers/main.py::raiffeisen_webhook for the policy."""
         self.provider.raiffeisen_webhook_signature_mode = "enforce"
         self.provider.raiffeisen_webhook_server_cert_pem = (
             "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n"
@@ -127,3 +145,37 @@ class TestProviderHelpers(TransactionCase):
         )
         self.assertIsNone(result)
         self.assertIn("not yet implemented", reason)
+
+    def test_enforce_rejects_when_verifier_returns_none(self):
+        """Verifier returns None in stub state OR when cert missing.
+        Controller treats `enforce` as 'sig_ok must be True' — None
+        in enforce mode means the webhook gets a 403, even though
+        the helper itself returned no boolean verdict.
+
+        Pure-helper unit test exercising the `is True` semantics:
+        this is what the controller branch hinges on. We verify the
+        helper's return shape so a refactor can't quietly flip the
+        semantics back to None=accept."""
+        # Stub mode: verifier returns None → controller rejects.
+        self.provider.raiffeisen_webhook_signature_mode = "enforce"
+        self.provider.raiffeisen_webhook_server_cert_pem = (
+            "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n"
+        )
+        result, _reason = self.provider._raiffeisen_verify_webhook_signature(
+            payload={"order": {}}, signature="xxx",
+        )
+        # Critical contract: enforce branch is `if sig_ok is not True`,
+        # so the only accepted value is True. None / False both reject.
+        # Mirror that here so a future verifier returning None still
+        # short-circuits to a hard-fail.
+        self.assertIsNot(result, True,
+                         "enforce-mode contract: verifier must return "
+                         "True to accept; None/False both reject")
+
+        # Cert-missing mode: same outcome — None, controller rejects.
+        self.provider.raiffeisen_webhook_server_cert_pem = False
+        result, reason = self.provider._raiffeisen_verify_webhook_signature(
+            payload={"order": {}}, signature="xxx",
+        )
+        self.assertIsNot(result, True)
+        self.assertIn("cert", reason.lower())

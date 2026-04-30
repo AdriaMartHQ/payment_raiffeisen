@@ -101,6 +101,13 @@ class PaymentProvider(models.Model):
              "requests from any other IP are rejected with HTTP 403. "
              "Leave empty to disable the IP allowlist (LOG ONLY — the "
              "remote_addr is logged but not enforced).\n\n"
+             "remote_addr is taken from werkzeug — behind a reverse "
+             "proxy you MUST enable Odoo's proxy_mode (odoo.conf "
+             "`proxy_mode = True`) so XFF is honored from the trusted "
+             "proxy hop only. Without proxy_mode the allowlist will "
+             "see the proxy IP, so allowlist that proxy IP instead. "
+             "X-Forwarded-For is intentionally NOT trusted directly "
+             "by this controller — that header is client-controlled.\n\n"
              "Per the legacy Shop_Gateway_Interface doc the UPC test "
              "server posts from 195.85.198.16 and prod from "
              "195.85.198.15. Confirm the actual RaiAccept Serbia "
@@ -110,8 +117,10 @@ class PaymentProvider(models.Model):
     raiffeisen_webhook_signature_mode = fields.Selection(
         [
             ("off", "Off (log only)"),
-            ("warn", "Warn (log invalid signatures, accept anyway)"),
-            ("enforce", "Enforce (reject invalid signatures with HTTP 403)"),
+            ("warn", "Warn (log mismatches, accept anyway)"),
+            ("enforce",
+             "Enforce (HARD REJECT — also fails when verifier "
+             "stub-returns)"),
         ],
         string="Webhook Signature Verification",
         default="off",
@@ -122,11 +131,17 @@ class PaymentProvider(models.Model):
              "_apply_updates to verify amount + currency authoritatively. "
              "Safe baseline.\n\n"
              "warn — verify the signature when present, log a warning "
-             "on mismatch but still process. Use during the first prod "
-             "week to capture real-payload mismatches without breaking.\n\n"
-             "enforce — reject any webhook with missing or invalid "
-             "signature. Switch to this only after capturing real prod "
-             "payloads and confirming the canonicalization scheme.",
+             "on mismatch (sig_ok=False) but still process. Use during "
+             "the first prod week to capture real-payload mismatches "
+             "without breaking.\n\n"
+             "enforce — accept ONLY when the verifier returns True. "
+             "Mismatches (False) AND unverified payloads (None — "
+             "verifier stub or cert missing) both reject with HTTP 403. "
+             "Do NOT switch this on until the real RSA verifier is "
+             "implemented (current verifier is a stub returning None) "
+             "and you have captured real prod payloads + confirmed "
+             "the canonicalization scheme. Otherwise webhooks will "
+             "hard-fail.",
     )
     raiffeisen_webhook_server_cert_pem = fields.Text(
         string="Gateway Public Certificate (PEM)",

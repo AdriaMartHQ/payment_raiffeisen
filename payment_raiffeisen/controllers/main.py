@@ -47,13 +47,25 @@ class RaiffeisenController(http.Controller):
     def raiffeisen_webhook(self, **data):
         """Handle asynchronous webhook notifications from RaiAccept.
 
-        Defense-in-depth (added 19.0.1.6.0 — Codex review on PR #76):
+        Defense-in-depth (added 19.0.1.6.0 — Codex review on PR #76,
+        revised after Codex P1 on PR #78):
 
-          1. Source IP allowlist — reject HTTP 403 when remote_addr is
-             not in the merchant's `raiffeisen_webhook_allowed_ips`
+          1. Source IP allowlist — reject HTTP 403 when remote_addr
+             is not in the merchant's `raiffeisen_webhook_allowed_ips`
              config. Bypassed when the field is empty (log-only mode
              so a misconfigured allowlist can't accidentally lock the
              merchant out of receiving webhooks during onboarding).
+
+             remote_addr is taken straight from
+             `request.httprequest.remote_addr`. We do NOT trust the
+             X-Forwarded-For header in this controller because that
+             header is client-controlled and a forged
+             "X-Forwarded-For: 195.85.198.15" would otherwise bypass
+             the allowlist. Operators behind a reverse proxy MUST
+             enable Odoo's proxy_mode (odoo.conf `proxy_mode = True`),
+             which makes werkzeug rewrite remote_addr from the
+             trusted-hop XFF chain. Without proxy_mode, remote_addr
+             is the proxy IP — admin should allowlist that proxy IP.
 
           2. Signature verification — invoked when
              `raiffeisen_webhook_signature_mode` is `warn` or
@@ -61,8 +73,13 @@ class RaiffeisenController(http.Controller):
              canonicalization scheme needs to be confirmed against
              real prod payloads); see
              `_raiffeisen_verify_webhook_signature` docstring for the
-             roadmap. `enforce` mode rejects when the verifier returns
-             False; `warn` mode logs a warning but proceeds.
+             roadmap. In `enforce` mode the controller rejects unless
+             the verifier returns True (so a stub returning None is
+             treated as "verification failed" — by design, an admin
+             enabling enforce while the verifier is unimplemented
+             gets a hard-fail rather than silent acceptance). In
+             `warn` mode mismatches and unverified payloads are
+             logged but the request still processes.
 
           3. Authoritative re-fetch — `_apply_updates` queries the
              gateway directly for amount + currency, so even an
@@ -77,13 +94,13 @@ class RaiffeisenController(http.Controller):
         until the merchant configures the allowlist / cert.
         """
         # ----- Source IP audit -----
-        remote_ip = (
-            request.httprequest.headers.get("X-Forwarded-For", "")
-            .split(",")[0]
-            .strip()
-            or request.httprequest.remote_addr
-            or "?"
-        )
+        # NOTE: deliberately NOT reading X-Forwarded-For here — that
+        # header is client-controlled and trusting its first hop would
+        # let an attacker bypass the IP allowlist by forging it. Odoo
+        # already rewrites remote_addr from XFF when proxy_mode is on
+        # (recommended for any reverse-proxy deployment); when it's
+        # off, remote_addr is the direct connection IP.
+        remote_ip = request.httprequest.remote_addr or "?"
 
         # ----- Provider lookup (for security config) -----
         # We can't call _process before knowing the provider, but the
@@ -150,6 +167,15 @@ class RaiffeisenController(http.Controller):
             )
 
         # ----- Signature verification (mode-driven) -----
+        # Codex (PR #78) flagged that returning None from the stub
+        # verifier silently accepted requests in `enforce` mode even
+        # though the field help advertises enforce as rejecting
+        # invalid/missing signatures. Fixed: enforce now requires
+        # sig_ok is True; everything else (False AND None) is
+        # rejected. Admin enabling enforce while the verifier is
+        # still a stub will hard-fail webhooks — exactly what they
+        # asked for, and a strong signal to wait until the real
+        # verifier ships before flipping the switch.
         sig = (
             payload.get("signature")
             or payload.get("Signature")
@@ -160,17 +186,17 @@ class RaiffeisenController(http.Controller):
             payload, sig,
         )
         mode = provider.raiffeisen_webhook_signature_mode
-        if sig_ok is False and mode == "enforce":
+        if mode == "enforce" and sig_ok is not True:
             _logger.warning(
                 "Raiffeisen webhook REJECTED: signature %s "
-                "(remote_ip=%s, order=%s)",
+                "(remote_ip=%s, order=%s, mode=enforce)",
                 sig_reason, remote_ip,
                 order_data.get("orderIdentification", "?"),
             )
             return request.make_json_response(
-                {"error": "invalid signature"}, status=403,
+                {"error": "invalid or unverified signature"}, status=403,
             )
-        if sig_ok is False and mode == "warn":
+        if mode == "warn" and sig_ok is False:
             _logger.warning(
                 "Raiffeisen webhook signature mismatch (warn-only): %s "
                 "(remote_ip=%s, order=%s)",
@@ -178,7 +204,8 @@ class RaiffeisenController(http.Controller):
                 order_data.get("orderIdentification", "?"),
             )
         # sig_ok is None when the verifier is the stub or the mode is
-        # "off"; we still log it so prod operators can audit the gap.
+        # "off"; in `off`/`warn` we still log it so prod operators can
+        # audit the gap.
 
         # Log only non-PII identifiers — no customer data
         _logger.info(
