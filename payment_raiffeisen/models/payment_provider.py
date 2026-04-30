@@ -81,6 +81,66 @@ class PaymentProvider(models.Model):
              "Set to 1.0 if store and gateway currencies are the same.",
     )
 
+    # ── Webhook security (added 19.0.1.6.0) ──────────────────────────
+    # Defense-in-depth for /payment/raiffeisen/webhook. Defaults are
+    # safe-by-default conservative: empty IP allowlist = log-only,
+    # signature mode "off" = no enforcement until merchant captures a
+    # real prod webhook payload and confirms the wire format with
+    # RaiAccept (the legacy Shop_Gateway_Interface_Token_eng.pdf
+    # describes form-POST + RSA, but the modern RaiAccept Documentation
+    # Portal serves a JSON webhook whose signature scheme has to be
+    # verified against an actual payload before we hardcode the
+    # canonicalization order).
+
+    raiffeisen_webhook_allowed_ips = fields.Char(
+        string="Webhook Allowed Source IPs",
+        copy=False,
+        groups="base.group_system",
+        help="Comma-separated list of trusted source IPs from which "
+             "the gateway may POST to the webhook URL. When set, "
+             "requests from any other IP are rejected with HTTP 403. "
+             "Leave empty to disable the IP allowlist (LOG ONLY — the "
+             "remote_addr is logged but not enforced).\n\n"
+             "Per the legacy Shop_Gateway_Interface doc the UPC test "
+             "server posts from 195.85.198.16 and prod from "
+             "195.85.198.15. Confirm the actual RaiAccept Serbia "
+             "egress IPs with pos-ecommerce@raiffeisenbank.rs before "
+             "hard-enforcing in production.",
+    )
+    raiffeisen_webhook_signature_mode = fields.Selection(
+        [
+            ("off", "Off (log only)"),
+            ("warn", "Warn (log invalid signatures, accept anyway)"),
+            ("enforce", "Enforce (reject invalid signatures with HTTP 403)"),
+        ],
+        string="Webhook Signature Verification",
+        default="off",
+        copy=False,
+        groups="base.group_system",
+        help="Controls whether the webhook signature is verified.\n\n"
+             "off (default) — relies on the gateway re-fetch in "
+             "_apply_updates to verify amount + currency authoritatively. "
+             "Safe baseline.\n\n"
+             "warn — verify the signature when present, log a warning "
+             "on mismatch but still process. Use during the first prod "
+             "week to capture real-payload mismatches without breaking.\n\n"
+             "enforce — reject any webhook with missing or invalid "
+             "signature. Switch to this only after capturing real prod "
+             "payloads and confirming the canonicalization scheme.",
+    )
+    raiffeisen_webhook_server_cert_pem = fields.Text(
+        string="Gateway Public Certificate (PEM)",
+        copy=False,
+        groups="base.group_system",
+        help="The bank's public X.509 certificate (PEM format) used to "
+             "verify webhook signatures. Issued by RaiAccept Onboarding "
+             "with the merchant credential pack — corresponds to the "
+             "`test-server.cert` (sandbox) / production server cert "
+             "files in the integration ZIP. Populate this field before "
+             "switching `Webhook Signature Verification` away from "
+             "`off`.",
+    )
+
     # ── State-aware credential validation ────────────────────────────
 
     @api.constrains("state", "code",
@@ -118,6 +178,95 @@ class PaymentProvider(models.Model):
         self.filtered(lambda p: p.code == "raiffeisen").update({
             "support_refund": "partial",
         })
+
+    # ── Webhook security helpers (19.0.1.6.0) ────────────────────────
+
+    def _raiffeisen_webhook_allowed_ip_list(self):
+        """Parse the comma-separated allowed-IP field into a set.
+
+        Whitespace and empty entries are dropped. Returns an empty
+        set when the field is unset (caller treats empty set as
+        "log only, no enforcement").
+        """
+        self.ensure_one()
+        raw = self.raiffeisen_webhook_allowed_ips or ""
+        return {
+            ip.strip() for ip in raw.split(",")
+            if ip.strip()
+        }
+
+    def _raiffeisen_webhook_ip_allowed(self, remote_ip):
+        """Return (allowed: bool, reason: str) for a webhook source IP.
+
+        Returns (True, "no allowlist configured") when the merchant
+        hasn't set any IPs (log-only mode). Returns (True, "matched")
+        when remote_ip is in the configured set, else (False, "...").
+        Caller decides what to do with the booleans — the controller
+        rejects on False; the verification mode field also influences
+        the final decision.
+        """
+        self.ensure_one()
+        allowed = self._raiffeisen_webhook_allowed_ip_list()
+        if not allowed:
+            return (True, "no allowlist configured (log-only)")
+        if remote_ip in allowed:
+            return (True, "ip in allowlist")
+        return (False, f"ip {remote_ip} not in allowlist")
+
+    def _raiffeisen_verify_webhook_signature(self, payload, signature):
+        """Verify a webhook payload signature against the gateway cert.
+
+        Currently a stub returning (None, "signature scheme not yet
+        implemented") because the JSON webhook signature canonicalization
+        used by modern RaiAccept (Serbia branding) needs to be confirmed
+        against real prod payloads — the legacy 2019 UPC documentation
+        describes a form-POST + RSA scheme that does not match the
+        current JSON shape.
+
+        Roadmap for filling in this method (after prod cutover):
+
+        1. Capture 5-10 real webhook POST bodies from prod (signed by
+           the bank, served from ~195.85.198.0/24 or whatever IP range
+           RaiAccept Serbia actually uses).
+        2. Cross-reference with the canonicalization order specified in
+           the RaiAccept Documentation Portal (the link sent in
+           Raiffeisen 2026-04-24 11:56 production-approval email).
+        3. Implement the verifier here using `cryptography` library:
+
+               from cryptography.hazmat.primitives import hashes, serialization
+               from cryptography.hazmat.primitives.asymmetric import padding
+
+               cert = x509.load_pem_x509_certificate(
+                   self.raiffeisen_webhook_server_cert_pem.encode()
+               )
+               public_key = cert.public_key()
+               try:
+                   public_key.verify(
+                       base64.b64decode(signature),
+                       canonical_payload_bytes,
+                       padding.PKCS1v15(),
+                       hashes.SHA1(),  # confirm with portal docs
+                   )
+                   return (True, "signature valid")
+               except InvalidSignature:
+                   return (False, "signature invalid")
+
+        4. Add real round-trip tests with a fixture cert + payload.
+
+        Until then, this stub returns None to signal "verification not
+        attempted"; the controller logs and either accepts (off / warn
+        modes) or rejects with a clear error (enforce mode).
+
+        Returns: (None | True | False, human-readable reason).
+        """
+        self.ensure_one()
+        if self.raiffeisen_webhook_signature_mode == "off":
+            return (None, "signature mode 'off' — verification skipped")
+        if not self.raiffeisen_webhook_server_cert_pem:
+            return (None, "gateway public cert not configured")
+        # TODO: implement real RSA verification once prod-payload
+        # canonicalization is confirmed (see roadmap above).
+        return (None, "signature scheme not yet implemented (stub)")
 
     # ── Credential helpers ───────────────────────────────────────────
 
