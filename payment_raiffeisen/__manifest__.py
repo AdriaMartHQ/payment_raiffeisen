@@ -1,6 +1,6 @@
 {
     "name": "Payment Provider: Raiffeisen RaiAccept",
-    "version": "19.0.1.6.2",
+    "version": "19.0.1.6.3",
     "category": "Accounting/Payment Providers",
     "sequence": 370,
     "summary": "Accept online card payments via Raiffeisen Bank RaiAccept gateway (Serbia & SEE).",
@@ -18,6 +18,7 @@
         "views/redirect_form_templates.xml",
         "views/payment_provider_views.xml",
         "data/payment_provider_data.xml",
+        "data/ir_cron_data.xml",
     ],
     "post_init_hook": "post_init_hook",
     "uninstall_hook": "uninstall_hook",

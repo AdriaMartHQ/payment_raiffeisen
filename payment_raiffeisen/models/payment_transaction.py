@@ -355,6 +355,28 @@ class PaymentTransaction(models.Model):
                 _("Cannot refund: no source transaction found.")
             )
 
+        # Odoo only counts refunds that are done, so a refund still in
+        # flight leaves the full amount refundable. Serialize refunds of
+        # one payment and refuse what would exceed it.
+        self.env.cr.execute(
+            "SELECT id FROM payment_transaction WHERE id = %s FOR UPDATE",
+            [source_tx.id],
+        )
+        other_refunds = source_tx.child_transaction_ids.filtered(
+            lambda t: t != self and t.operation == "refund"
+            and t.state in ("draft", "pending", "authorized", "done")
+        )
+        committed = abs(sum(other_refunds.mapped("amount")))
+        if source_tx.currency_id.compare_amounts(
+            committed + abs(self.amount), source_tx.amount
+        ) > 0:
+            raise ValidationError(_(
+                "Cannot refund %(amount)s: %(committed)s of %(total)s is "
+                "already refunded or still being processed by the bank.",
+                amount=abs(self.amount), committed=committed,
+                total=source_tx.amount,
+            ))
+
         order_id = source_tx.raiffeisen_order_id
         if order_id and not source_tx.raiffeisen_tx_id:
             source_tx.raiffeisen_tx_id = (
@@ -400,16 +422,36 @@ class PaymentTransaction(models.Model):
             )
             return
 
-        # Close state machine based on actual gateway response
-        refund_status = resp.get("status", "")
-        if refund_status in ("SUCCESS", "PAID"):
+        # Close state machine based on actual gateway response.
+        # RaiAccept can answer the refund POST without a status while it
+        # is still processing (seen on production 2026-10-21: no status,
+        # SUCCESS three seconds later). An unknown status is pending, never
+        # a failure; the cron reads the final one from the gateway.
+        refund_status = resp.get("status") or ""
+        odoo_state = _STATUS_MAP.get(refund_status, "pending")
+        if odoo_state == "done":
             self._set_done()
-        elif refund_status == "PENDING":
-            self._set_pending()
-        else:
+        elif odoo_state in ("error", "cancel"):
             self._set_error(
                 state_message=_(
                     "Refund failed on Raiffeisen gateway (%s).",
                     refund_status,
                 )
             )
+        else:
+            # Settled later by _cron_raiffeisen_sync_pending_refunds
+            self._set_pending()
+
+    @api.model
+    def _cron_raiffeisen_sync_pending_refunds(self):
+        """Settle refunds left pending: RaiAccept sends no webhook for
+        them, so their status is read from the gateway."""
+        refunds = self.search([
+            ("provider_code", "=", "raiffeisen"),
+            ("operation", "=", "refund"),
+            ("state", "=", "pending"),
+            ("create_date", ">=", fields.Datetime.subtract(
+                fields.Datetime.now(), days=7)),
+        ])
+        for tx in refunds:
+            tx._apply_updates({"reference": tx.reference})
