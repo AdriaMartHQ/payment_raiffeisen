@@ -547,6 +547,21 @@ class PaymentProvider(models.Model):
         self.ensure_one()
         return self._raiffeisen_api_request("GET", f"/orders/{order_id}")
 
+    def _raiffeisen_get_order_transactions(self, order_id):
+        """List the gateway transactions (purchase, refunds) of an order.
+
+        GET /orders/{id} does not include them — checked against sandbox
+        and production on 2026-10-21 — so without this call no
+        transactionId was ever stored and refunds could not be sent.
+        """
+        self.ensure_one()
+        res = self._raiffeisen_api_request(
+            "GET", f"/orders/{order_id}/transactions"
+        )
+        if isinstance(res, dict):
+            res = res.get("transactions") or []
+        return res if isinstance(res, list) else []
+
     def _raiffeisen_refund(self, order_id, transaction_id, amount_cents,
                            currency):
         """Issue a refund via the API."""

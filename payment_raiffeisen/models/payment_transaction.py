@@ -136,6 +136,45 @@ class PaymentTransaction(models.Model):
 
     # ── Apply gateway status updates ─────────────────────────────────
 
+    def _raiffeisen_gateway_transactions(self, order_data):
+        """Transactions of this order on the gateway.
+
+        Taken from the order payload when the gateway includes them,
+        otherwise fetched from GET /orders/{id}/transactions (RaiAccept
+        leaves them out of GET /orders/{id}).
+        """
+        txs = order_data.get("transactions")
+        if txs is None:
+            # Kept apart from the order query: a failure here must not
+            # turn an order the gateway reports PAID into pending.
+            try:
+                txs = self.provider_id._raiffeisen_get_order_transactions(
+                    self.raiffeisen_order_id
+                )
+            except Exception:
+                _logger.warning(
+                    "Raiffeisen: could not list transactions of order %s",
+                    self.raiffeisen_order_id,
+                    exc_info=True,
+                )
+                txs = []
+        return txs or []
+
+    def _raiffeisen_successful_purchase_id(self):
+        """transactionId of the order's successful PURCHASE, or "".
+
+        For payments recorded before 19.0.1.6.2, which never stored it.
+        """
+        self.ensure_one()
+        txs = self._raiffeisen_gateway_transactions({})
+        purchase = next(
+            (t for t in txs
+             if t.get("transactionType") == "PURCHASE"
+             and t.get("status") in ("SUCCESS", "PAID")),
+            None,
+        )
+        return (purchase or {}).get("transactionId") or ""
+
     def _apply_updates(self, payment_data):
         """Process the RaiAccept payment response and update state.
 
@@ -164,7 +203,7 @@ class PaymentTransaction(models.Model):
             if is_refund:
                 # For refund callbacks, find our specific transaction
                 # by raiffeisen_tx_id in the order's transaction list
-                txs = order_data.get("transactions", [])
+                txs = self._raiffeisen_gateway_transactions(order_data)
                 refund_tx = next(
                     (t for t in txs
                      if t.get("transactionId") == self.raiffeisen_tx_id),
@@ -202,7 +241,7 @@ class PaymentTransaction(models.Model):
                 gateway_status = order_data.get("status", "PENDING")
 
                 # Extract transaction ID — prefer successful PURCHASE
-                txs = order_data.get("transactions", [])
+                txs = self._raiffeisen_gateway_transactions(order_data)
                 if txs and not self.raiffeisen_tx_id:
                     # First: successful PURCHASE
                     purchase_tx = next(
@@ -317,6 +356,10 @@ class PaymentTransaction(models.Model):
             )
 
         order_id = source_tx.raiffeisen_order_id
+        if order_id and not source_tx.raiffeisen_tx_id:
+            source_tx.raiffeisen_tx_id = (
+                source_tx._raiffeisen_successful_purchase_id()
+            )
         tx_id = source_tx.raiffeisen_tx_id
         if not order_id or not tx_id:
             raise ValidationError(
