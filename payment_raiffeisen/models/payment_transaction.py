@@ -357,11 +357,17 @@ class PaymentTransaction(models.Model):
 
         # Odoo only counts refunds that are done, so a refund still in
         # flight leaves the full amount refundable. Serialize refunds of
-        # one payment and refuse what would exceed it.
+        # one payment and refuse what would exceed it. The lock is taken
+        # with a real UPDATE: under REPEATABLE READ a second refund that
+        # waited on it then fails with a serialization error and Odoo
+        # retries it on a fresh snapshot that sees the first refund (a
+        # SELECT ... FOR UPDATE would let it go on with its old snapshot).
         self.env.cr.execute(
-            "SELECT id FROM payment_transaction WHERE id = %s FOR UPDATE",
+            "UPDATE payment_transaction SET write_date = write_date"
+            " WHERE id = %s",
             [source_tx.id],
         )
+        source_tx.invalidate_recordset(["child_transaction_ids"])
         other_refunds = source_tx.child_transaction_ids.filtered(
             lambda t: t != self and t.operation == "refund"
             and t.state in ("draft", "pending", "authorized", "done")
