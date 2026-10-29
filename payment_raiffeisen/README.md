@@ -75,8 +75,30 @@ Official RaiAccept API reference, test card numbers, and integration guides:
 - Authoritative amount/currency verification against gateway response
 - Transaction ID selection prefers successful PURCHASE transactions
 - Refund callbacks routed by `transactionId` for correct child tx resolution
+- Two 5-minute crons ask the gateway for what it may never report:
+  pending refunds (RaiAccept sends no webhook for them) and card
+  payments left draft/pending when the webhook does not arrive
 
 ## Changelog
+
+### 19.0.1.6.4 — 2026-10-30
+
+Card payments no longer depend on the webhook.
+
+- RaiAccept did not POST the webhook for the first production payment
+  (2026-10-21); only the customer's return arrived. Had the customer
+  closed the tab after 3-D Secure, the card would have been charged
+  and the order left unconfirmed, with no invoice and no fiscal receipt.
+- New cron *Raiffeisen: settle unfinished card payments* (every
+  5 minutes): sale payments in draft/pending, 5 minutes to 48 hours old,
+  are settled through `_process`, the same path as the webhook and the
+  return, and post-processed once (order confirmed, invoice, downstream
+  hooks). PENDING, unknown statuses and failed queries change nothing
+  and are asked about again on the next run.
+- The webhook and the cron cannot both settle or post-process one
+  payment: under REPEATABLE READ the second writer of the transaction
+  row gets a serialization error. The webhook now lets Odoo replay the
+  request in that case instead of answering 500.
 
 ### 19.0.1.4.0 — 2026-04-14
 

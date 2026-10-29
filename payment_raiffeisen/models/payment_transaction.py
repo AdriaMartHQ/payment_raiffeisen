@@ -3,6 +3,7 @@ from urllib.parse import urlparse, parse_qsl, urlunparse
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
+from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
 
 _logger = logging.getLogger(__name__)
 
@@ -461,3 +462,135 @@ class PaymentTransaction(models.Model):
         ])
         for tx in refunds:
             tx._apply_updates({"reference": tx.reference})
+
+    # ── Status poll for unfinished payments (19.0.1.6.4) ─────────────
+
+    @api.model
+    def _cron_raiffeisen_sync_pending_payments(self, limit=100):
+        """Settle card payments the gateway never reported back.
+
+        RaiAccept does not always POST the webhook (production
+        2026-10-21: only the browser return arrived). A customer who
+        closes the tab after 3-D Secure leaves a charged card and a
+        draft transaction, so the order is never confirmed and nothing
+        downstream (invoice, fiscal receipt) runs. Each run asks the
+        gateway about sale payments between 5 minutes and 48 hours old.
+
+        Every transaction is settled through `_process`, the path the
+        webhook and the return use, and committed on its own. A result
+        that is not final (PENDING, an unknown status, a failed query)
+        is rolled back: the transaction stays as it was and is asked
+        about again next run. A draft must not turn pending here: Odoo
+        then marks the quotation sent and mails the customer.
+
+        No lock is held while the gateway is queried. The webhook or
+        return may settle the same payment at the same time; under
+        REPEATABLE READ the second writer of the row fails with a
+        serialization error. Here the transaction is then skipped; an
+        HTTP request is replayed by Odoo and finds it already done.
+        """
+        now = fields.Datetime.now()
+        txs = self.search([
+            ("provider_code", "=", "raiffeisen"),
+            ("operation", "not in", ("refund", "validation")),
+            ("source_transaction_id", "=", False),
+            ("state", "in", ("draft", "pending")),
+            ("raiffeisen_order_id", "!=", False),
+            ("create_date", "<=", fields.Datetime.subtract(now, minutes=5)),
+            ("create_date", ">=", fields.Datetime.subtract(now, hours=48)),
+        ], order="id", limit=limit)
+        cron = self.env["ir.cron"]
+        cron._commit_progress(remaining=len(txs))
+        for tx in txs:
+            tx._raiffeisen_poll_status()
+            if cron._commit_progress(1) <= 0:
+                break
+
+    def _raiffeisen_poll_status(self):
+        """Ask the gateway about one unfinished payment and settle it.
+
+        The caller commits afterwards. Returns the final state the
+        transaction reached here, or "" when nothing was changed.
+        """
+        self.ensure_one()
+        cr = self.env.cr
+        # Reading the state again starts a fresh snapshot: the webhook
+        # may have settled the payment since the cron searched. The whole
+        # cache goes, not just this record: it was filled before the
+        # last commit and may hold related records changed since.
+        self.env.invalidate_all()
+        if self.state not in ("draft", "pending"):
+            return ""
+        try:
+            with cr.savepoint():
+                self._process("raiffeisen", {"reference": self.reference})
+                if self.state in ("draft", "pending"):
+                    raise _NotFinal()
+        except _NotFinal:
+            self.invalidate_recordset()
+            return ""
+        except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
+            _logger.info(
+                "Raiffeisen: payment %s was settled concurrently, skipped.",
+                self.reference,
+            )
+            self.invalidate_recordset()
+            return ""
+        except Exception:
+            _logger.exception(
+                "Raiffeisen: status poll of payment %s failed.",
+                self.reference,
+            )
+            self.invalidate_recordset()
+            return ""
+        state = self.state
+        _logger.info(
+            "Raiffeisen: payment %s settled by status poll: %s.",
+            self.reference, state,
+        )
+        # Commit the bank's verdict before post-processing, so a failure
+        # there cannot undo it; Odoo's post-process cron retries it.
+        self.env["ir.cron"]._commit_progress()
+        self._raiffeisen_post_process_once()
+        return state
+
+    def _raiffeisen_post_process_once(self):
+        """Post-process now (confirm order, invoice, fiscal receipt)
+        unless another flow (the /payment/status poll, Odoo's cron)
+        already did or is doing it.
+
+        A real UPDATE claims the row first: a flow that post-processed
+        it after this snapshot makes it fail, one still at it makes it
+        wait and then fail, and any flow arriving later waits for this
+        one and then fails to write `is_post_processed` itself.
+        """
+        self.ensure_one()
+        cr = self.env.cr
+        try:
+            with cr.savepoint():
+                cr.execute(
+                    "UPDATE payment_transaction SET write_date = write_date"
+                    " WHERE id = %s AND is_post_processed IS NOT TRUE"
+                    " RETURNING id",
+                    [self.id],
+                )
+                if not cr.fetchone():
+                    return
+                self.invalidate_recordset()
+                self._post_process()
+        except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
+            _logger.info(
+                "Raiffeisen: payment %s is post-processed by another flow.",
+                self.reference,
+            )
+        except Exception:
+            # Left to Odoo's post-process cron (is_post_processed unset).
+            _logger.exception(
+                "Raiffeisen: post-processing of payment %s failed.",
+                self.reference,
+            )
+        self.invalidate_recordset()
+
+
+class _NotFinal(Exception):
+    """The gateway gave no final status; undo whatever `_process` did."""

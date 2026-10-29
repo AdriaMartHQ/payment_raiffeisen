@@ -9,4 +9,16 @@
         <field name="interval_type">minutes</field>
         <field name="active">True</field>
     </record>
+
+    <!-- RaiAccept does not always send the webhook: settle card payments
+         left draft/pending by asking the gateway (19.0.1.6.4). -->
+    <record id="cron_sync_pending_payments" model="ir.cron">
+        <field name="name">Raiffeisen: settle unfinished card payments</field>
+        <field name="model_id" ref="payment.model_payment_transaction"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_raiffeisen_sync_pending_payments()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="active">True</field>
+    </record>
 </odoo>
