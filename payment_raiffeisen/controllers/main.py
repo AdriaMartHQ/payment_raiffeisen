@@ -3,6 +3,7 @@ import logging
 
 from odoo import http
 from odoo.http import request
+from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
 
 _logger = logging.getLogger(__name__)
 
@@ -235,6 +236,12 @@ class RaiffeisenController(http.Controller):
             request.env["payment.transaction"].sudo()._process(
                 "raiffeisen", notification_data
             )
+        except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
+            # The status poll cron (or the return) settled the payment at
+            # the same time. Let Odoo replay the request on a fresh
+            # snapshot, where it finds the payment settled and changes
+            # nothing, instead of answering 500.
+            raise
         except Exception:
             _logger.exception("Raiffeisen webhook processing failed")
             return request.make_json_response(
