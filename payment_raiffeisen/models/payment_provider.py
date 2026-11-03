@@ -443,6 +443,16 @@ class PaymentProvider(models.Model):
 
         gateway_currency = self.raiffeisen_gateway_currency or "RSD"
 
+        # Refuse rather than convert: with the rate left at 1.0 a EUR amount would
+        # be charged as the same number of dinars.
+        if tx.currency_id.name != gateway_currency:
+            raise ValidationError(
+                _("Cannot process payment: the order is in %(order)s but this "
+                  "payment method charges in %(gateway)s. Please refresh the "
+                  "cart and try again.",
+                  order=tx.currency_id.name, gateway=gateway_currency)
+            )
+
         # Amount in gateway minor units.
         # See _raiffeisen_minor_unit_factor for currency-specific rules.
         amount = tx.amount

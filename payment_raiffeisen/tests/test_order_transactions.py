@@ -9,6 +9,7 @@ the order payload has none. The gateway is mocked; nothing goes out.
 
 from unittest.mock import patch
 
+from odoo.exceptions import ValidationError
 from odoo.tests import TransactionCase, tagged
 
 PROVIDER = "odoo.addons.payment_raiffeisen.models.payment_provider.PaymentProvider"
@@ -50,6 +51,14 @@ class TestOrderTransactions(TransactionCase):
     PURCHASE = {"transactionId": "TX-PURCHASE", "transactionType": "PURCHASE",
                 "status": "SUCCESS", "transactionAmount": 496,
                 "transactionCurrency": "RSD"}
+
+    def test_order_in_another_currency_is_refused_not_charged_as_dinars(self):
+        eur = self.env.ref("base.EUR")
+        eur.active = True
+        tx = self._tx("RTEST-CUR")
+        tx.currency_id = eur
+        with self.assertRaises(ValidationError):
+            self.provider._raiffeisen_build_order_payload(tx)
 
     def test_tx_id_fetched_when_order_payload_has_no_transactions(self):
         tx = self._tx("RTEST-1")
